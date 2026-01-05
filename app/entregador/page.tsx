@@ -10,132 +10,110 @@ const supabase = createClient(
 
 export default function PainelEntregador() {
   const [pedidos, setPedidos] = useState<any[]>([]);
-  const [nomeEntregador, setNomeEntregador] = useState('');
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const id = localStorage.getItem('entregador_id');
-    const nome = localStorage.getItem('entregador_nome');
-
-    if (!id) {
-      router.push('/entregador/login');
-    } else {
-      setNomeEntregador(nome || 'Entregador');
-      // Garante que está ONLINE ao carregar a página de trabalho
-      supabase.from('entregadores').update({ online: true }).eq('id', id).then();
-    }
-
+    if (!id) router.push('/entregador/login');
+    
     carregarPedidos();
     const intervalo = setInterval(carregarPedidos, 10000);
-
-    // Lógica para quando ele apenas fechar a aba do navegador
-    const handleTabClose = () => {
-      if (id) {
-        // O beacon é mais garantido para quando a aba é fechada bruscamente
-        const data = JSON.stringify({ online: false });
-        navigator.sendBeacon(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/entregadores?id=eq.${id}`, data);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleTabClose);
-
-    return () => {
-      clearInterval(intervalo);
-      window.removeEventListener('beforeunload', handleTabClose);
-    };
+    return () => clearInterval(intervalo);
   }, []);
 
   async function carregarPedidos() {
-    const { data } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('pedidos')
+      .select('*')
+      .eq('status_servico', 'aberto') // Só mostra o que não foi finalizado
+      .order('created_at', { ascending: false });
     if (data) setPedidos(data);
   }
 
-  // --- FUNÇÃO DE LOGOUT COM CORREÇÃO DE BUG ---
-  const fazerLogout = async () => {
-    const id = localStorage.getItem('entregador_id');
+  // --- 🛠 FUNÇÃO PARA DAR BAIXA NO STOCK E FINALIZAR ---
+  async function finalizarServico(pedido: any) {
+    if (!confirm("Confirmas que o serviço foi entregue e o stock deve ser baixado?")) return;
     
-    if (id) {
-      // 1. Primeiro tentamos avisar o banco que ele saiu (Bolinha cinza)
-      // Usamos o 'await' para o código "parar" e esperar o banco responder
-      const { error } = await supabase
-        .from('entregadores')
-        .update({ online: false })
-        .eq('id', id);
+    setLoadingId(pedido.id);
 
-      if (error) {
-        console.error("Erro ao atualizar status:", error);
+    try {
+      // 1. Identificar o que baixar
+      if (pedido.combustivel.includes('GASOLINA')) {
+        await supabase.rpc('decrement_estoque', { item_name: 'GASOLINA', qtd: 5 });
+      } else if (pedido.combustivel.includes('ETANOL')) {
+        await supabase.rpc('decrement_estoque', { item_name: 'ETANOL', qtd: 5 });
       }
-    }
 
-    // 2. Só depois limpamos o celular e redirecionamos
-    localStorage.removeItem('entregador_id');
-    localStorage.removeItem('entregador_nome');
-    router.push('/entregador/login');
-  };
+      // 2. Se tiver Galão, baixa 1 unidade
+      if (pedido.combustivel.includes('GALÃO')) {
+        await supabase.rpc('decrement_estoque', { item_name: 'GALAO', qtd: 1 });
+      }
+
+      // 3. Atualizar o status do pedido para 'concluido'
+      await supabase
+        .from('pedidos')
+        .update({ status_servico: 'concluido', status_pagamento: 'pago' })
+        .eq('id', pedido.id);
+
+      alert("✅ Serviço Finalizado e Stock Atualizado!");
+      carregarPedidos();
+    } catch (err) {
+      alert("Erro ao dar baixa no stock. Verifica a tua ligação.");
+    } finally {
+      setLoadingId(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 text-white font-sans">
-      {/* HEADER COM STATUS */}
-      <div className="flex justify-between items-center mb-10">
-        <div>
-          <h1 className="text-2xl font-black italic text-yellow-500 uppercase leading-none tracking-tighter">GasSOS</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{nomeEntregador} (Online)</p>
-          </div>
+      <header className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-black italic text-yellow-500">GasSOS</h1>
+        <div className="flex items-center gap-2">
+           <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+           <span className="text-[10px] font-bold uppercase text-slate-400">Em Serviço</span>
         </div>
-        
-        <button 
-          onClick={fazerLogout}
-          className="bg-red-600/20 text-red-500 border border-red-500/30 px-5 py-2 rounded-2xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all"
-        >
-          Sair / Offline
-        </button>
-      </div>
+      </header>
 
       <div className="space-y-6">
         {pedidos.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-[40px]">
-            <p className="text-slate-600 font-bold uppercase text-xs tracking-widest">Aguardando novos chamados...</p>
-          </div>
+          <p className="text-center py-20 opacity-30 font-bold uppercase text-xs">Sem entregas pendentes...</p>
         ) : (
           pedidos.map(p => (
-            <div key={p.id} className="bg-slate-900 p-6 rounded-[35px] border border-white/5 shadow-2xl relative overflow-hidden">
-               {/* Indicador visual de pagamento no card */}
-               <div className={`absolute top-0 left-0 w-full h-1.5 ${p.status_pagamento === 'pago' ? 'bg-green-500' : 'bg-red-600 animate-pulse'}`}></div>
-               
-               <div className="flex justify-between items-center mb-6 pt-2">
-                 <span className={`text-[9px] font-black px-3 py-1 rounded-full ${p.status_pagamento === 'pago' ? 'bg-green-500 text-white' : 'bg-red-500 text-white animate-pulse'}`}>
-                   {p.status_pagamento === 'pago' ? '✓ PAGAMENTO OK' : '⚠ AGUARDANDO PIX'}
-                 </span>
-                 <p className="text-xl font-black italic text-white tracking-tighter">R$ {p.valor_total},00</p>
-               </div>
-               
-               <div className="bg-slate-800/50 p-4 rounded-2xl mb-6 space-y-3">
-                 <div>
-                   <p className="text-[9px] text-slate-500 font-black uppercase italic">Cliente</p>
-                   <p className="text-lg font-black">{p.nome_cliente || 'Não informado'}</p>
-                 </div>
-                 <div className="flex justify-between border-t border-white/5 pt-3">
-                   <div>
-                     <p className="text-[9px] text-slate-500 font-black uppercase italic">Placa</p>
-                     <p className="text-sm font-bold text-yellow-500">{p.placa_veiculo || '---'}</p>
-                   </div>
-                   <div className="text-right">
-                     <p className="text-[9px] text-slate-500 font-black uppercase italic">Combustível</p>
-                     <p className="text-sm font-bold uppercase italic">{p.combustivel}</p>
-                   </div>
-                 </div>
-               </div>
+            <div key={p.id} className="bg-slate-900 rounded-[35px] border border-white/5 overflow-hidden shadow-2xl">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-xl font-black italic">R$ {p.valor_total},00</span>
+                  <span className={`text-[8px] font-black px-2 py-1 rounded-full ${p.status_pagamento === 'pago' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}>
+                    {p.status_pagamento === 'pago' ? 'PAGO' : 'AGUARDAR PIX'}
+                  </span>
+                </div>
 
-               {/* BOTÃO DE GPS INTEGRADO */}
-               <a 
-                 href={`https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}`}
-                 target="_blank"
-                 className="block w-full bg-white text-slate-950 py-5 rounded-2xl text-center font-black uppercase text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3"
-               >
-                 <span>📍</span> ABRIR ROTA NO GOOGLE MAPS
-               </a>
+                <div className="space-y-1 mb-6">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Item Selecionado:</p>
+                  <p className="text-lg font-black text-yellow-500 uppercase italic">{p.combustivel}</p>
+                  <p className="text-xs text-white/80 font-bold mt-2">📍 {p.nome_cliente} - {p.placa_veiculo}</p>
+                </div>
+
+                {/* BOTÕES DE ACÇÃO */}
+                <div className="grid grid-cols-1 gap-3">
+                  <a 
+                    href={`https://www.google.com/maps?q=${p.latitude},${p.longitude}`}
+                    target="_blank"
+                    className="bg-white text-black py-4 rounded-2xl text-center font-black text-xs uppercase"
+                  >
+                    📍 Abrir Rota no GPS
+                  </a>
+
+                  <button 
+                    onClick={() => finalizarServico(p)}
+                    disabled={loadingId === p.id}
+                    className="bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black text-xs uppercase shadow-lg shadow-green-900/20"
+                  >
+                    {loadingId === p.id ? 'A processar...' : '✅ Finalizar e Baixar Stock'}
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         )}

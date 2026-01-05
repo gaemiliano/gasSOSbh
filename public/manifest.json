@@ -1,16 +1,17 @@
 {
   "name": "GasSOS BH",
   "short_name": "GasSOS",
-  "description": "Socorro de Combustível 24h",
+  "description": "Socorro de Combustível em Belo Horizonte",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#eab308",
+  "background_color": "#050505",
+  "theme_color": "#fbbf24",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/483/483497.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
