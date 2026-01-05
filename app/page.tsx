@@ -15,6 +15,17 @@ export default function GasSOS() {
   const [partidaFrio, setPartidaFrio] = useState(false);
   const [precos, setPrecos] = useState({ gasolina: 65, etanol: 55, taxa: 15 });
   const [loading, setLoading] = useState(false);
+  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
+
+  // 1. Tenta capturar a localização assim que o app abre
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.error("Erro ao obter GPS:", err)
+      );
+    }
+  }, []);
 
   // Carregar preços reais do banco de dados
   useEffect(() => {
@@ -35,21 +46,41 @@ export default function GasSOS() {
 
   const total = (combustivel === 'gasolina' ? precos.gasolina : precos.etanol) + (partidaFrio ? precos.taxa : 0);
 
-  // Função para registrar o pedido e mudar para tela de pagamento
+  // Função para registrar o pedido com GPS e abrir WhatsApp
   const finalizarPedido = async () => {
     setLoading(true);
-    try {
-      await supabase.from('pedidos').insert([{
-        combustivel: combustivel.toUpperCase(),
-        valor_total: total,
-        status: 'aguardando_pagamento'
-      }]);
-      setEtapa('pagamento');
-    } catch (error) {
-      alert("Erro ao processar pedido. Tente novamente.");
-    } finally {
+    
+    // Tenta pegar a localização atualizada antes de enviar
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const mapaLink = `https://www.google.com/maps?q=${lat},${lng}`;
+
+      try {
+        // Salva no banco com o link do mapa
+        await supabase.from('pedidos').insert([{
+          combustivel: combustivel.toUpperCase(),
+          valor_total: total,
+          status: 'aguardando_pagamento',
+          ponto_proximo: mapaLink // O entregador verá este link
+        }]);
+
+        // Abre o WhatsApp com o seu número real
+        const zapLink = `https://wa.me/5531988089870?text=${encodeURIComponent(
+          `🚨 *NOVO PEDIDO GasSOS*\n\n⛽ *Produto:* ${combustivel.toUpperCase()}\n💰 *Valor:* R$ ${total},00\n📍 *Localização:* ${mapaLink}`
+        )}`;
+        
+        window.open(zapLink, '_blank');
+        setEtapa('pagamento');
+      } catch (error) {
+        alert("Erro ao processar pedido. Tente novamente.");
+      } finally {
+        setLoading(false);
+      }
+    }, () => {
+      alert("Por favor, ative o GPS para solicitar o socorro.");
       setLoading(false);
-    }
+    });
   };
 
   // TELA 2: PAGAMENTO (PIX)
@@ -65,13 +96,13 @@ export default function GasSOS() {
             <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200">
               <p className="text-[10px] font-black text-slate-400 uppercase mb-4">Código PIX Copia e Cola</p>
               <div className="bg-white p-4 rounded-xl text-[10px] font-mono break-all text-slate-600 border border-slate-100">
-                00020126360014BR.GOV.BCB.PIX0114+55319999999995204000053039865405{total}.00
+                00020126360014BR.GOV.BCB.PIX0114+55319880898705204000053039865405{total}.00
               </div>
             </div>
 
             <button 
               onClick={() => {
-                navigator.clipboard.writeText(`00020126360014BR.GOV.BCB.PIX0114+55319999999995204000053039865405${total}.00`);
+                navigator.clipboard.writeText(`00020126360014BR.GOV.BCB.PIX0114+55319880898705204000053039865405${total}.00`);
                 alert("Código PIX copiado!");
               }}
               className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all"
@@ -80,7 +111,7 @@ export default function GasSOS() {
             </button>
 
             <button 
-              onClick={() => window.open(`https://wa.me/5531999999999?text=Enviei o PIX de R$${total}. Favor iniciar o socorro.`, '_blank')}
+              onClick={() => window.open(`https://wa.me/5531988089870?text=Enviei o PIX de R$${total}. Favor iniciar o socorro.`, '_blank')}
               className="w-full bg-green-500 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               <span>Já paguei / Chamar Zap</span>
@@ -104,7 +135,14 @@ export default function GasSOS() {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative">
             <div className="absolute -inset-4 bg-yellow-500 rounded-full animate-ping opacity-20" />
-            <div className="relative bg-yellow-500 p-4 rounded-full shadow-[0_0_30px_rgba(251,191,36,0.5)] border-2 border-white"><span className="text-2xl">📍</span></div>
+            <div className="relative bg-yellow-500 p-4 rounded-full shadow-[0_0_30px_rgba(251,191,36,0.5)] border-2 border-white">
+              <span className="text-2xl">📍</span>
+            </div>
+            {coords && (
+              <div className="absolute top-12 bg-black/50 px-2 py-1 rounded text-[8px] font-bold">
+                LAT: {coords.lat.toFixed(4)} | LNG: {coords.lng.toFixed(4)}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -128,7 +166,7 @@ export default function GasSOS() {
               onClick={() => setCombustivel('etanol')}
               className={`p-6 rounded-[32px] border-4 transition-all ${combustivel === 'etanol' ? 'border-green-500 bg-green-50' : 'border-slate-50 bg-slate-50 opacity-40'}`}
             >
-              <span className="text-4xl block mb-2">🌽</span>
+              <span className="text-4xl block mb-2">🎋</span>
               <span className="font-black text-[10px] uppercase text-slate-500">Etanol</span>
               <p className="font-black text-lg text-slate-900 uppercase tracking-tighter italic">R$ {precos.etanol},00</p>
             </button>
@@ -155,7 +193,7 @@ export default function GasSOS() {
           disabled={loading}
           className="w-full bg-slate-900 text-white mt-8 py-6 rounded-[24px] shadow-2xl font-black text-lg tracking-[0.2em] uppercase italic active:scale-95 transition-all flex justify-between px-10 items-center disabled:opacity-50"
         >
-          <span>{loading ? 'PROCESSANDO...' : 'SOLICITAR SOS'}</span>
+          <span>{loading ? 'BUSCANDO LOCALIZAÇÃO...' : 'SOLICITAR SOS'}</span>
           {!loading && <span className="text-yellow-400 font-mono">R$ {total},00</span>}
         </button>
       </div>
