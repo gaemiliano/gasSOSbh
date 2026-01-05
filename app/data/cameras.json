@@ -1,0 +1,30 @@
+[
+    {
+      "id": "C05051",
+      "nome": "Câmera Olho Vivo - 05 BPM (Seguro)",
+      "lat": -19.930786,
+      "lng": -43.988867,
+      "seguro": true
+    },
+    {
+      "id": "C05_GENERICA",
+      "nome": "Ponto Monitorado - Av. Amazonas",
+      "lat": -19.948316,
+      "lng": -44.009837,
+      "seguro": true
+    },
+    {
+      "id": "VENDA_NOVA_CENTRO",
+      "nome": "Área Monitorada - Venda Nova",
+      "lat": -19.825900,
+      "lng": -44.010568,
+      "seguro": true
+    },
+    {
+      "id": "SAVASSI_PRACA",
+      "nome": "Base Móvel PM - Savassi",
+      "lat": -19.933391,
+      "lng": -43.936965,
+      "seguro": true
+    }
+  ]
