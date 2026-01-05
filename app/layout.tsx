@@ -1,38 +1,31 @@
-import './globals.css';
-import { Inter } from 'next/font/google';
+import './globals.css'
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] })
 
-export const metadata = {
-  title: 'GasSOS BH | Gestão de Combustível',
-  description: 'Socorro de combustível 24h e Gestão de Frotas',
-  manifest: '/manifest.json', // Habilita a instalação como App
-};
+export const metadata: Metadata = {
+  title: 'GasSOS - Resgate de Combustível 24h',
+  description: 'Acabou a gasolina? Não abandone seu veículo. Levamos combustível até você em minutos. Atendimento BH e Região.',
+  generator: 'Next.js',
+  applicationName: 'GasSOS',
+  keywords: ['gasolina', 'pane seca', 'socorro', 'combustivel', 'motoqueiro', 'bh', 'resgate'],
+  themeColor: '#eab308',
+  viewport: { width: 'device-width', initialScale: 1, maximumScale: 1 },
+  openGraph: {
+    title: 'GasSOS - Pane Seca? Resgate Imediato 24h ⛽',
+    description: 'Acabou o combustível? Nós levamos até você! Clique e peça socorro agora.',
+    url: 'https://gassos.vercel.app', // <-- SEU LINK FINAL AQUI
+    siteName: 'GasSOS Resgate',
+    locale: 'pt_BR',
+    type: 'website',
+  },
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-br">
-      <head>
-        {/* Meta tag crucial para evitar que o layout "quebre" no celular ao digitar */}
-        <meta 
-          name="viewport" 
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" 
-        />
-        <meta name="theme-color" content="#020617" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        
-        {/* Ícone que aparece na tela do celular */}
-        <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/483/483497.png" />
-        <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/483/483497.png" />
-      </head>
-      <body className={`${inter.className} antialiased bg-slate-950 text-slate-100`}>
-        {children}
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
-  );
+  )
 }
