@@ -1,84 +1,70 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-// Importamos o "dynamic" do Next.js
-import dynamic from 'next/dynamic';
 
-// 1. IMPORTAÇÃO DINÂMICA (Isso resolve o erro 'window is not defined')
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
-);
-const TileLayer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.TileLayer),
-  { ssr: false }
-);
-const Marker = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Marker),
-  { ssr: false }
-);
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || '', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
 
-// Importamos o CSS do Leaflet normalmente
-import 'leaflet/dist/leaflet.css';
+export default function PainelAdmin() {
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [precos, setPrecos] = useState<any[]>([]);
 
-// Componente interno que usa o mapa (também deve ser tratado com cuidado)
-const MapContent = ({ coords }: { coords: { lat: number; lng: number } }) => {
-  const { useMap } = require('react-leaflet');
-  const L = require('leaflet');
-  const map = useMap();
+  async function carregarDados() {
+    const { data: p } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
+    const { data: pr } = await supabase.from('produtos').select('*');
+    if (p) setPedidos(p);
+    if (pr) setPrecos(pr);
+  }
 
   useEffect(() => {
-    map.setView([coords.lat, coords.lng], 16);
-  }, [coords, map]);
-
-  const icon = L.icon({
-    iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-    iconSize: [38, 38],
-    iconAnchor: [19, 38],
-  });
-
-  return <Marker position={[coords.lat, coords.lng]} icon={icon} />;
-};
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
-
-export default function GasSOS() {
-  // ... (mantenha seus estados e useEffects de preços e GPS aqui)
-  const [coords, setCoords] = useState<{ lat: number; lng: number }>({
-    lat: -19.9167,
-    lng: -43.9345,
-  });
-  const [isMounted, setIsMounted] = useState(false);
-
-  // 2. Só permite renderizar o mapa após o componente "montar" no navegador
-  useEffect(() => {
-    setIsMounted(true);
+    carregarDados();
   }, []);
 
-  // ... (sua função finalizarPedido e lógica do total)
+  async function concluirPedido(id: string) {
+    await supabase.from('pedidos').update({ status: 'concluido' }).eq('id', id);
+    carregarDados();
+  }
+
+  async function excluirPedido(id: string) {
+    if (confirm("Deseja excluir este pedido?")) {
+      await supabase.from('pedidos').delete().eq('id', id);
+      carregarDados();
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col font-sans text-slate-100 overflow-hidden">
-      {/* MAPA REAL DINÂMICO */}
-      <div className="h-[45vh] w-full relative z-0 bg-slate-800">
-        {isMounted && (
-          <MapContainer
-            center={[coords.lat, coords.lng]}
-            zoom={16}
-            zoomControl={false}
-            style={{ height: '100%', width: '100%' }}
-          >
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-            <MapContent coords={coords} />
-          </MapContainer>
-        )}
-      </div>
+    <div className="min-h-screen bg-slate-50 p-6 font-sans">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-black text-slate-900 mb-6 italic uppercase tracking-tighter border-b-4 border-yellow-400 inline-block">
+          Painel Administrativo
+        </h1>
 
-      {/* ... (resto do seu código do Painel de Seleção) */}
+        <div className="space-y-4 mt-6">
+          {pedidos.length === 0 && <p className="text-slate-400 font-bold italic">Nenhum pedido pendente...</p>}
+          
+          {pedidos.map(pedido => (
+            <div key={pedido.id} className={`p-5 rounded-3xl border-2 flex justify-between items-center bg-white ${pedido.status === 'concluido' ? 'opacity-50 border-slate-100' : 'border-white shadow-xl'}`}>
+              <div>
+                <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${pedido.status === 'concluido' ? 'bg-slate-200 text-slate-500' : 'bg-yellow-100 text-yellow-600'}`}>
+                  {pedido.status === 'concluido' ? 'Entregue' : 'Pendente'}
+                </span>
+                <p className="text-lg font-black italic text-slate-900 mt-1">{pedido.combustivel} - R$ {pedido.valor_total},00</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">{new Date(pedido.created_at).toLocaleString('pt-BR')}</p>
+              </div>
+              
+              <div className="flex gap-2">
+                {/* Link para o dono ver onde o cliente está, mas abre no Google Maps externo */}
+                <a href={pedido.ponto_proximo} target="_blank" className="bg-blue-600 text-white p-3 rounded-2xl text-[10px] font-black uppercase">Ver Mapa</a>
+                
+                {pedido.status !== 'concluido' && (
+                  <button onClick={() => concluirPedido(pedido.id)} className="bg-green-500 text-white p-3 rounded-2xl text-[10px] font-black uppercase">OK</button>
+                )}
+                
+                <button onClick={() => excluirPedido(pedido.id)} className="bg-red-100 text-red-500 p-3 rounded-2xl text-[10px] font-black uppercase">Excluir</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
