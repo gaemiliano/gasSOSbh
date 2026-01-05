@@ -2,88 +2,70 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Conexão direta com o seu banco
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || '', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
 
 export default function AdminPage() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [pedidos, setPedidos] = useState<any[]>([]);
 
-  // Carrega os dados assim que abre a página
   useEffect(() => {
-    carregarTudo();
-    const interval = setInterval(carregarTudo, 5000); // Atualiza pedidos a cada 5 segundos
-    return () => clearInterval(interval);
+    carregarDados();
   }, []);
 
-  async function carregarTudo() {
-    const { data: prod } = await supabase.from('produtos').select('*').order('tipo', { ascending: true });
-    const { data: ped } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
-    if (prod) setProdutos(prod);
-    if (ped) setPedidos(ped);
+  async function carregarDados() {
+    // Puxa TODOS os produtos da tabela sem filtro nenhum para não sumir nada
+    const { data: p } = await supabase.from('produtos').select('*');
+    const { data: o } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
+    if (p) setProdutos(p);
+    if (o) setPedidos(o);
   }
 
-  // ESSA FUNÇÃO MUDA O PREÇO NO BANCO E JÁ ATUALIZA A PÁGINA INICIAL
-  async function handlePrecoChange(id: string, novoValor: string) {
-    const { error } = await supabase
-      .from('produtos')
-      .update({ preco: Number(novoValor) })
-      .eq('id', id);
-    
-    if (error) {
-      alert("Erro ao atualizar no Supabase");
-    } else {
-      carregarTudo(); // Recarrega para confirmar
-    }
+  async function mudarPreco(id: string, valor: string) {
+    await supabase.from('produtos').update({ preco: Number(valor) }).eq('id', id);
+    // Não precisa dar alert, a atualização no banco é imediata
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8 font-sans">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-black mb-10 uppercase italic">Controle de Estoque e Preços ⛽</h1>
-
-        {/* ÁREA DE PRODUTOS (GASOLINA, ALCOOL, SPRAY/TAXA) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {produtos.map((item) => (
-            <div key={item.id} className="bg-white p-6 rounded-[30px] shadow-lg border-2 border-slate-100">
-              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">
-                {item.tipo === 'taxa' ? '❄️ Spray / Partida Frio' : item.tipo.toUpperCase()}
-              </label>
-              <div className="flex items-center">
-                <span className="text-xl font-bold text-slate-300 mr-2">R$</span>
-                <input 
-                  type="number" 
-                  defaultValue={item.preco}
-                  onBlur={(e) => handlePrecoChange(item.id, e.target.value)}
-                  className="text-4xl font-black bg-transparent w-full outline-none text-slate-900"
-                />
-              </div>
-              <p className="text-[9px] text-green-500 font-bold mt-2 italic">● Sincronizado com a Home</p>
+    <div style={{ padding: '40px', fontFamily: 'sans-serif', backgroundColor: '#f4f4f4', minHeight: '100 screen' }}>
+      <h1 style={{ fontWeight: '900', fontStyle: 'italic' }}>PAINEL DE PREÇOS GasSOS</h1>
+      
+      {/* OS 3 PRODUTOS (Gasolina, Álcool, Spray) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '50px' }}>
+        {produtos.map((item) => (
+          <div key={item.id} style={{ background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+            <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#888' }}>{item.tipo.toUpperCase()}</label>
+            <div style={{ display: 'flex', alignItems: 'center', marginTop: '5px' }}>
+              <span style={{ fontWeight: 'bold', marginRight: '5px' }}>R$</span>
+              <input 
+                type="number" 
+                defaultValue={item.preco} 
+                onBlur={(e) => mudarPreco(item.id, e.target.value)}
+                style={{ fontSize: '24px', fontWeight: '900', width: '100%', border: 'none', outline: 'none' }}
+              />
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        {/* LISTA DE PEDIDOS EM TEMPO REAL */}
-        <h2 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest">Chamados de Hoje</h2>
-        <div className="space-y-4">
-          {pedidos.map((ped) => (
-            <div key={ped.id} className="bg-white p-6 rounded-[30px] border border-slate-100 flex justify-between items-center shadow-sm">
-              <div>
-                <p className="font-black text-lg italic">{ped.combustivel}</p>
-                <p className="text-slate-400 text-[10px] font-bold">VALOR TOTAL: R$ {ped.valor_total},00</p>
-              </div>
-              <div className="flex gap-2">
-                <a href={ped.ponto_proximo} target="_blank" className="bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase">Ver GPS</a>
-                <button 
-                  onClick={async () => { await supabase.from('pedidos').delete().eq('id', ped.id); carregarTudo(); }}
-                  className="bg-red-50 text-red-500 px-5 py-3 rounded-2xl font-black text-[10px] uppercase"
-                >
-                  Excluir
-                </button>
-              </div>
+      <h2 style={{ fontWeight: '900', fontSize: '14px', color: '#444' }}>PEDIDOS AGUARDANDO</h2>
+      <div style={{ marginTop: '20px' }}>
+        {pedidos.map((pedido) => (
+          <div key={pedido.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{pedido.combustivel} - R$ {pedido.valor_total},00</p>
+              <small style={{ color: '#aaa' }}>{new Date(pedido.created_at).toLocaleString()}</small>
             </div>
-          ))}
-        </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <a href={pedido.ponto_proximo} target="_blank" style={{ fontSize: '10px', fontWeight: 'bold', textDecoration: 'none', color: 'blue' }}>VER MAPA</a>
+              <button 
+                onClick={async () => { await supabase.from('pedidos').delete().eq('id', pedido.id); carregarDados(); }}
+                style={{ background: 'none', border: 'none', color: 'red', fontWeight: 'bold', cursor: 'pointer', fontSize: '10px' }}
+              >
+                EXCLUIR
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
