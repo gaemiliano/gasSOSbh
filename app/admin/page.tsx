@@ -1,71 +1,108 @@
 'use client';
+
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || '', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
+// Conexão direta para evitar erros de importação
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default function AdminPage() {
+export default function AdminPanel() {
   const [produtos, setProdutos] = useState<any[]>([]);
-  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mensagem, setMensagem] = useState('');
 
+  // 1. Carregar preços atuais do banco
   useEffect(() => {
-    carregarDados();
+    fetchPrecos();
   }, []);
 
-  async function carregarDados() {
-    // Puxa TODOS os produtos da tabela sem filtro nenhum para não sumir nada
-    const { data: p } = await supabase.from('produtos').select('*');
-    const { data: o } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false });
-    if (p) setProdutos(p);
-    if (o) setPedidos(o);
+  async function fetchPrecos() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (data) setProdutos(data);
+    setLoading(false);
   }
 
-  async function mudarPreco(id: string, valor: string) {
-    await supabase.from('produtos').update({ preco: Number(valor) }).eq('id', id);
-    // Não precisa dar alert, a atualização no banco é imediata
+  // 2. Função para salvar o novo preço
+  async function atualizarPreco(id: number, novoPreco: string) {
+    const valorFormatado = parseFloat(novoPreco.replace(',', '.'));
+    
+    const { error } = await supabase
+      .from('produtos')
+      .update({ preco: valorFormatado })
+      .eq('id', id);
+
+    if (error) {
+      setMensagem('❌ Erro ao atualizar');
+    } else {
+      setMensagem('✅ Preço atualizado com sucesso!');
+      fetchPrecos();
+      setTimeout(() => setMensagem(''), 3000);
+    }
   }
+
+  if (loading) return <div className="p-10 text-center">Carregando Painel...</div>;
 
   return (
-    <div style={{ padding: '40px', fontFamily: 'sans-serif', backgroundColor: '#f4f4f4', minHeight: '100 screen' }}>
-      <h1 style={{ fontWeight: '900', fontStyle: 'italic' }}>PAINEL DE PREÇOS GasSOS</h1>
-      
-      {/* OS 3 PRODUTOS (Gasolina, Álcool, Spray) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '50px' }}>
-        {produtos.map((item) => (
-          <div key={item.id} style={{ background: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-            <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#888' }}>{item.tipo.toUpperCase()}</label>
-            <div style={{ display: 'flex', alignItems: 'center', marginTop: '5px' }}>
-              <span style={{ fontWeight: 'bold', marginRight: '5px' }}>R$</span>
-              <input 
-                type="number" 
-                defaultValue={item.preco} 
-                onBlur={(e) => mudarPreco(item.id, e.target.value)}
-                style={{ fontSize: '24px', fontWeight: '900', width: '100%', border: 'none', outline: 'none' }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="min-h-screen bg-slate-100 p-4 font-sans">
+      <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+        
+        {/* Cabeçalho */}
+        <div className="bg-slate-900 p-6 text-white">
+          <h1 className="text-2xl font-black">Painel GasSOS</h1>
+          <p className="text-slate-400 text-sm">Gerenciamento de Preços em Tempo Real</p>
+        </div>
 
-      <h2 style={{ fontWeight: '900', fontSize: '14px', color: '#444' }}>PEDIDOS AGUARDANDO</h2>
-      <div style={{ marginTop: '20px' }}>
-        {pedidos.map((pedido) => (
-          <div key={pedido.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p style={{ margin: 0, fontWeight: 'bold' }}>{pedido.combustivel} - R$ {pedido.valor_total},00</p>
-              <small style={{ color: '#aaa' }}>{new Date(pedido.created_at).toLocaleString()}</small>
+        <div className="p-6 space-y-6">
+          {mensagem && (
+            <div className="bg-blue-50 text-blue-700 p-3 rounded-xl text-center font-bold animate-bounce">
+              {mensagem}
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <a href={pedido.ponto_proximo} target="_blank" style={{ fontSize: '10px', fontWeight: 'bold', textDecoration: 'none', color: 'blue' }}>VER MAPA</a>
-              <button 
-                onClick={async () => { await supabase.from('pedidos').delete().eq('id', pedido.id); carregarDados(); }}
-                style={{ background: 'none', border: 'none', color: 'red', fontWeight: 'bold', cursor: 'pointer', fontSize: '10px' }}
-              >
-                EXCLUIR
-              </button>
-            </div>
+          )}
+
+          <div className="space-y-4">
+            {produtos.map((produto) => (
+              <div key={produto.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                  {produto.nome}
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-slate-400 font-mono">R$</span>
+                  <input 
+                    type="number" 
+                    defaultValue={produto.preco}
+                    onBlur={(e) => atualizarPreco(produto.id, e.target.value)}
+                    className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-xl font-black focus:border-yellow-500 outline-none transition-all"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 italic">
+                  * Clique fora do campo ou mude de item para salvar automaticamente.
+                </p>
+              </div>
+            ))}
           </div>
-        ))}
+
+          <div className="pt-6 border-t border-slate-100">
+            <button 
+              onClick={() => window.open('/', '_blank')}
+              className="w-full bg-slate-200 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-300 transition-colors"
+            >
+              Visualizar App do Cliente
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 text-center">
+          <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+            Sistema Conectado ao Supabase Cloud
+          </p>
+        </div>
       </div>
     </div>
   );
