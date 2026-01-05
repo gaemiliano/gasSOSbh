@@ -1,145 +1,168 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
-export default function AdminPanel() {
-  const [produtos, setProdutos] = useState<any[]>([]);
+export default function PainelAdmin() {
   const [pedidos, setPedidos] = useState<any[]>([]);
-  const [autorizado, setAutorizado] = useState(false);
-  const [aba, setAba] = useState<'precos' | 'pedidos'>('precos');
-  const [mensagem, setMensagem] = useState('');
+  const [precos, setPrecos] = useState<any[]>([]);
+
+  async function carregarDados() {
+    const { data: p } = await supabase
+      .from('pedidos')
+      .select('*')
+      .order('created_at', { ascending: false });
+    const { data: pr } = await supabase.from('produtos').select('*');
+    if (p) setPedidos(p);
+    if (pr) setPrecos(pr);
+  }
 
   useEffect(() => {
-    if (autorizado) {
-      fetchPrecos();
-      fetchPedidos();
-    }
-  }, [autorizado]);
+    carregarDados();
+    const interval = setInterval(carregarDados, 20000); // Atualiza a cada 20s
+    return () => clearInterval(interval);
+  }, []);
 
-  async function fetchPrecos() {
-    const { data } = await supabase.from('produtos').select('*').order('id', { ascending: true });
-    if (data) setProdutos(data);
+  // 1. FUNÇÃO PARA CONCLUIR PEDIDO
+  async function concluirPedido(id: string) {
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ status: 'concluido' })
+      .eq('id', id);
+    if (!error) carregarDados();
   }
 
-  async function fetchPedidos() {
-    const { data } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false }).limit(10);
-    if (data) setPedidos(data);
-  }
-
-  async function atualizarPreco(id: number, novoPreco: string) {
-    const valor = parseFloat(novoPreco.replace(',', '.'));
-    const { error } = await supabase.from('produtos').update({ preco: valor }).eq('id', id);
-    if (!error) {
-      setMensagem('✅ Preço Atualizado!');
-      fetchPrecos();
-      setTimeout(() => setMensagem(''), 2000);
+  // 2. FUNÇÃO PARA EXCLUIR PEDIDO
+  async function excluirPedido(id: string) {
+    if (confirm('Deseja remover este pedido permanentemente?')) {
+      const { error } = await supabase.from('pedidos').delete().eq('id', id);
+      if (!error) carregarDados();
     }
   }
 
-  if (!autorizado) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center">
-          <h1 className="text-2xl font-black mb-6">Acesso Administrativo</h1>
-          <input 
-            type="password" 
-            placeholder="Senha de Acesso" 
-            className="w-full p-4 border-2 border-slate-200 rounded-xl mb-4 text-center text-xl outline-none focus:border-yellow-500 font-black"
-            onChange={(e) => e.target.value === '1234' && setAutorizado(true)}
-          />
-          <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Painel de Controle GasSOS</p>
-        </div>
-      </div>
-    );
+  async function atualizarPreco(id: string, novoPreco: string) {
+    await supabase
+      .from('produtos')
+      .update({ preco: Number(novoPreco) })
+      .eq('id', id);
+    carregarDados();
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 font-sans">
-      <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl overflow-hidden min-h-[600px] flex flex-col">
-        
-        {/* Header */}
-        <div className="bg-slate-900 p-6 text-white text-center">
-          <h1 className="text-xl font-black uppercase tracking-tighter italic">Painel GasSOS BH</h1>
-          {mensagem && <p className="text-yellow-400 text-sm font-bold mt-2 animate-bounce">{mensagem}</p>}
-        </div>
-
-        {/* Abas de Navegação */}
-        <div className="flex border-b">
-          <button 
-            onClick={() => setAba('precos')}
-            className={`flex-1 py-4 font-bold text-xs uppercase tracking-widest ${aba === 'precos' ? 'bg-white text-slate-900 border-b-4 border-yellow-500' : 'bg-slate-50 text-slate-400'}`}
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-900">
+      <div className="max-w-4xl mx-auto">
+        <header className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-black italic uppercase tracking-tighter">
+            Gestão GasSOS 🛠️
+          </h1>
+          <button
+            onClick={carregarDados}
+            className="text-[10px] font-bold bg-slate-200 px-4 py-2 rounded-full uppercase tracking-widest active:scale-95"
           >
-            💰 Preços
+            Atualizar Agora
           </button>
-          <button 
-            onClick={() => setAba('pedidos')}
-            className={`flex-1 py-4 font-bold text-xs uppercase tracking-widest ${aba === 'pedidos' ? 'bg-white text-slate-900 border-b-4 border-yellow-500' : 'bg-slate-50 text-slate-400'}`}
-          >
-            📋 Pedidos
-          </button>
-        </div>
+        </header>
 
-        {/* Conteúdo Aba Preços */}
-        {aba === 'precos' && (
-          <div className="p-6 space-y-6 animate-in fade-in duration-300">
-            {produtos.map((p) => (
-              <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{p.nome}</label>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="font-bold text-slate-300 text-2xl font-mono">R$</span>
-                  <input 
-                    type="number" 
-                    defaultValue={p.preco}
-                    onBlur={(e) => atualizarPreco(p.id, e.target.value)}
-                    className="w-full bg-white p-3 rounded-xl border-2 border-transparent focus:border-yellow-500 outline-none font-black text-2xl text-slate-800 shadow-inner"
+        {/* AJUSTE DE PREÇOS */}
+        <section className="bg-white p-6 rounded-[32px] shadow-sm border mb-8">
+          <h2 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-4 italic">
+            Tabela de Preços Atual
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {precos.map((item) => (
+              <div
+                key={item.id}
+                className="bg-slate-50 p-4 rounded-2xl border border-slate-100"
+              >
+                <p className="text-[10px] font-black uppercase text-slate-400">
+                  {item.tipo}
+                </p>
+                <div className="flex items-center">
+                  <span className="font-bold text-slate-400 mr-1">R$</span>
+                  <input
+                    type="number"
+                    defaultValue={item.preco}
+                    onBlur={(e) => atualizarPreco(item.id, e.target.value)}
+                    className="text-2xl font-black bg-transparent w-full focus:outline-none text-slate-900"
                   />
                 </div>
               </div>
             ))}
           </div>
-        )}
+        </section>
 
-        {/* Conteúdo Aba Pedidos */}
-        {aba === 'pedidos' && (
-          <div className="p-4 space-y-3 flex-1 overflow-y-auto animate-in fade-in duration-300">
-            <h2 className="text-[10px] font-black text-slate-400 uppercase mb-4 text-center">Últimos 10 Chamados</h2>
-            {pedidos.length === 0 ? (
-              <p className="text-center text-slate-400 py-10">Nenhum pedido ainda.</p>
-            ) : (
-              pedidos.map((ped) => (
-                <div key={ped.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm flex justify-between items-center">
-                  <div>
-                    <p className="font-black text-slate-800 text-sm">{ped.combustivel}</p>
-                    <p className="text-[10px] text-slate-400 font-bold">{new Date(ped.created_at).toLocaleDateString('pt-BR')} às {new Date(ped.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</p>
-                    <p className={`text-[10px] font-black mt-1 ${ped.localizacao_segura ? 'text-blue-500' : 'text-orange-500'}`}>
-                      {ped.localizacao_segura ? '🛡️ PONTO SEGURO' : '📍 VIA PÚBLICA'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-lg text-slate-900">R$ {ped.valor_total}</p>
-                    <p className="text-[8px] text-slate-400 uppercase font-bold tracking-tighter">{ped.ponto_proximo}</p>
-                  </div>
-                </div>
-              ))
-            )}
-            <button 
-              onClick={fetchPedidos} 
-              className="w-full text-[10px] font-bold text-blue-500 py-4 hover:underline"
+        {/* LISTA DINÂMICA DE PEDIDOS */}
+        <section className="space-y-4">
+          <h2 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-4 italic">
+            Histórico de Chamados
+          </h2>
+          {pedidos.map((pedido) => (
+            <div
+              key={pedido.id}
+              className={`p-6 rounded-[32px] border transition-all ${
+                pedido.status === 'concluido'
+                  ? 'bg-white opacity-60'
+                  : 'bg-white shadow-xl border-yellow-100'
+              }`}
             >
-              🔄 ATUALIZAR LISTA
-            </button>
-          </div>
-        )}
+              <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`w-3 h-3 rounded-full animate-pulse ${
+                        pedido.status === 'concluido'
+                          ? 'bg-green-500 animate-none'
+                          : 'bg-yellow-500'
+                      }`}
+                    />
+                    <span className="font-black uppercase text-xs tracking-tighter italic">
+                      {pedido.combustivel} —{' '}
+                      {pedido.status === 'concluido'
+                        ? 'Finalizado'
+                        : 'Pendente'}
+                    </span>
+                  </div>
+                  <p className="text-4xl font-black italic tracking-tighter">
+                    R$ {pedido.valor_total},00
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">
+                    {new Date(pedido.created_at).toLocaleString('pt-BR')}
+                  </p>
+                </div>
 
-        <div className="mt-auto p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[9px] font-bold text-slate-400 tracking-widest uppercase">
-          <span>Status: Online</span>
-          <span>Logado como Admin</span>
-        </div>
+                <div className="flex grid grid-cols-2 md:flex gap-2">
+                  <a
+                    href={pedido.ponto_proximo}
+                    target="_blank"
+                    className="bg-slate-900 text-white p-4 rounded-2xl font-black text-[10px] uppercase text-center hover:bg-slate-800 transition-all"
+                  >
+                    Ver Mapa
+                  </a>
+
+                  {pedido.status !== 'concluido' && (
+                    <button
+                      onClick={() => concluirPedido(pedido.id)}
+                      className="bg-green-500 text-white p-4 rounded-2xl font-black text-[10px] uppercase hover:bg-green-600 transition-all"
+                    >
+                      Concluir
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => excluirPedido(pedido.id)}
+                    className="bg-red-50 text-red-500 p-4 rounded-2xl font-black text-[10px] uppercase hover:bg-red-100 transition-all"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
       </div>
     </div>
   );
